@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2160" viewBox="0 0 1400 2160" role="img" aria-labelledby="title desc">
+  <title id="title">code_comment 评论定位与过滤流程</title>
+  <desc id="desc">模型生成结构化评论后，依次在当前 Diff、完整文件、其他 Diff 中定位；必要时调用重定位模型，最终由 Review Filter 根据 Diff 证据保留或删除评论。</desc>
+
+  <defs>
+    <linearGradient id="startFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111111"/>
+      <stop offset="1" stop-color="#333333"/>
+    </linearGradient>
+    <linearGradient id="processFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F2F2F2"/>
+    </linearGradient>
+    <linearGradient id="llmFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F7F7F7"/>
+      <stop offset="1" stop-color="#E7E7E7"/>
+    </linearGradient>
+    <linearGradient id="collectFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EDEDED"/>
+    </linearGradient>
+    <linearGradient id="filterFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FAFAFA"/>
+      <stop offset="1" stop-color="#E5E5E5"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-25%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.12"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-25%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#000000" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444444"/>
+    </marker>
+    <style>
+      .edge { fill: none; stroke: #444444; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .node { stroke-width: 2.5; filter: url(#softShadow); }
+      .label { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 28px; font-weight: 600; fill: #111111; text-anchor: middle; dominant-baseline: middle; }
+      .label-inverse { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 28px; font-weight: 600; fill: #FFFFFF; text-anchor: middle; dominant-baseline: middle; }
+      .decision-label { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 26px; font-weight: 600; fill: #111111; text-anchor: middle; dominant-baseline: middle; }
+      .edge-label { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 22px; font-weight: 700; fill: #111111; text-anchor: middle; dominant-baseline: middle; }
+      .step { font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 2px; fill: #555555; }
+    </style>
+  </defs>
+
+  <text class="step" x="92" y="102">解析与定位</text>
+  <text class="step" x="92" y="1272">重定位</text>
+  <text class="step" x="92" y="1652">收集与过滤</text>
+
+  <!-- Edges are drawn before nodes so their endpoints tuck under the shapes. -->
+  <path class="edge" d="M700 150 V180"/>
+  <path class="edge" d="M700 260 V290"/>
+  <path class="edge" d="M700 370 V400"/>
+  <path class="edge" d="M700 480 V500"/>
+
+  <path class="edge" d="M700 620 V670"/>
+  <text class="edge-label" x="730" y="644">否</text>
+
+  <path class="edge" d="M700 750 V770"/>
+  <path class="edge" d="M700 890 V940"/>
+  <text class="edge-label" x="730" y="914">否</text>
+
+  <path class="edge" d="M700 1020 V1040"/>
+  <path class="edge" d="M700 1160 V1210"/>
+
+  <!-- Early successful matches share a right-side route into the collector. -->
+  <path class="edge" d="M820 560 H1210 V1575 H910"/>
+  <text class="edge-label" x="865" y="530">是</text>
+  <path class="edge" d="M820 830 H1210"/>
+  <text class="edge-label" x="866" y="800">是</text>
+
+  <!-- Unique cross-file match: correct the file and line before collecting. -->
+  <path class="edge" d="M580 1100 H380 V1250"/>
+  <text class="edge-label" x="535" y="1070">是</text>
+  <path class="edge" d="M380 1330 V1575 H490"/>
+
+  <!-- Ambiguous match: ask the relocation model, then retry deterministic matching. -->
+  <path class="edge" d="M820 1100 H1020 V1250"/>
+  <text class="edge-label" x="865" y="1070">否</text>
+  <path class="edge" d="M1020 1330 V1380"/>
+  <path class="edge" d="M1020 1460 V1535 H910"/>
+
+  <path class="edge" d="M700 1615 V1660"/>
+  <path class="edge" d="M700 1740 V1760"/>
+
+  <!-- Final filter outcomes. -->
+  <path class="edge" d="M580 1820 H410 V1960"/>
+  <text class="edge-label" x="416" y="1788">否或证据不足</text>
+  <path class="edge" d="M820 1820 H990 V1960"/>
+  <text class="edge-label" x="955" y="1788">是</text>
+
+  <!-- Start -->
+  <rect class="node" x="450" y="70" width="500" height="80" rx="40" fill="url(#startFill)" stroke="#111111" filter="url(#shadow)"/>
+  <text class="label-inverse" x="700" y="110">模型调用 code_comment</text>
+
+  <!-- Deterministic search stages -->
+  <rect class="node" x="450" y="180" width="500" height="80" rx="18" fill="url(#processFill)" stroke="#333333"/>
+  <text class="label" x="700" y="220">解析结构化评论</text>
+
+  <rect class="node" x="450" y="290" width="500" height="80" rx="18" fill="url(#processFill)" stroke="#333333"/>
+  <text class="label" x="700" y="330">把评论路径约束为当前任务文件</text>
+
+  <rect class="node" x="390" y="400" width="620" height="80" rx="18" fill="url(#processFill)" stroke="#333333"/>
+  <text class="label" x="700" y="440">在当前文件 Diff Hunk 中匹配 existing_code</text>
+
+  <path class="node" d="M700 500 L820 560 L700 620 L580 560 Z" fill="#FFFFFF" stroke="#222222"/>
+  <text class="decision-label" x="700" y="560">定位成功？</text>
+
+  <rect class="node" x="430" y="670" width="540" height="80" rx="18" fill="url(#processFill)" stroke="#333333"/>
+  <text class="label" x="700" y="710">在完整新文件内容中匹配</text>
+
+  <path class="node" d="M700 770 L820 830 L700 890 L580 830 Z" fill="#FFFFFF" stroke="#222222"/>
+  <text class="decision-label" x="700" y="830">定位成功？</text>
+
+  <rect class="node" x="430" y="940" width="540" height="80" rx="18" fill="url(#processFill)" stroke="#333333"/>
+  <text class="label" x="700" y="980">在其他已审查 Diff 中查找</text>
+
+  <path class="node" d="M700 1040 L820 1100 L700 1160 L580 1100 Z" fill="#FFFFFF" stroke="#222222"/>
+  <text class="decision-label" x="700" y="1087">是否只有一个</text>
+  <text class="decision-label" x="700" y="1118">唯一匹配？</text>
+
+  <!-- Cross-file resolution -->
+  <rect class="node" x="190" y="1250" width="380" height="80" rx="18" fill="url(#collectFill)" stroke="#333333"/>
+  <text class="label" x="380" y="1278">修改评论文件</text>
+  <text class="label" x="380" y="1310">与行号</text>
+
+  <rect class="node" x="830" y="1250" width="380" height="80" rx="18" fill="url(#llmFill)" stroke="#333333"/>
+  <text class="label" x="1020" y="1278">调用 Re-location</text>
+  <text class="label" x="1020" y="1310">LLM</text>
+
+  <rect class="node" x="810" y="1380" width="420" height="80" rx="18" fill="url(#llmFill)" stroke="#333333"/>
+  <text class="label" x="1020" y="1408">使用新代码片段</text>
+  <text class="label" x="1020" y="1440">重新确定性匹配</text>
+
+  <!-- Collection and filter -->
+  <rect class="node" x="490" y="1535" width="420" height="80" rx="40" fill="url(#collectFill)" stroke="#222222"/>
+  <text class="label" x="700" y="1575">写入 Comment Collector</text>
+
+  <rect class="node" x="490" y="1660" width="420" height="80" rx="18" fill="url(#filterFill)" stroke="#222222"/>
+  <text class="label" x="700" y="1700">Review Filter</text>
+
+  <path class="node" d="M700 1760 L820 1820 L700 1880 L580 1820 Z" fill="#FFFFFF" stroke="#222222"/>
+  <text class="decision-label" x="700" y="1807">Diff 是否明确证明</text>
+  <text class="decision-label" x="700" y="1838">评论错误？</text>
+
+  <!-- Outcomes -->
+  <rect class="node" x="220" y="1960" width="380" height="90" rx="45" fill="#FFFFFF" stroke="#111111"/>
+  <circle cx="270" cy="2005" r="18" fill="#111111"/>
+  <path d="M262 2005 L268 2011 L280 1998" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="label" x="425" y="2005">保留评论</text>
+
+  <rect class="node" x="800" y="1960" width="380" height="90" rx="45" fill="#EAEAEA" stroke="#111111"/>
+  <circle cx="850" cy="2005" r="18" fill="#111111"/>
+  <path d="M843 1998 L857 2012 M857 1998 L843 2012" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+  <text class="label" x="1005" y="2005">删除评论</text>
+
+  <text x="700" y="2112" text-anchor="middle" font-family="Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#555555">结构化评论定位 → 确定性重试 → 证据过滤</text>
+</svg>
